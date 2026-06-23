@@ -39,6 +39,85 @@ const MatrixBackground = () => {
   );
 };
 
+// 1. NEW SETTINGS MODAL
+const SettingsModal = ({ isOpen, onClose, categories, onRefresh }: { isOpen: boolean, onClose: () => void, categories: any[], onRefresh: () => void }) => {
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryType, setNewCategoryType] = useState('expense');
+  const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
+
+  if (!isOpen) return null;
+
+  const handleAddCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCategoryName) return;
+    const { error } = await supabase.from('categories').insert([{ name: newCategoryName, type: newCategoryType }]);
+    if (!error) {
+      setNewCategoryName('');
+      onRefresh();
+    }
+  };
+
+  const handleDeleteCategory = async (id: number) => {
+    const { error } = await supabase.from('categories').delete().eq('id', id);
+    if (!error) {
+      setConfirmDeleteId(null);
+      onRefresh();
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-2xl p-6 shadow-2xl max-h-[80vh] overflow-y-auto">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-bold text-slate-100 flex items-center gap-2">
+            <svg className="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            System Settings
+          </h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-white text-2xl leading-none">&times;</button>
+        </div>
+
+        <div className="mb-8">
+          <h3 className="text-sm font-medium text-slate-400 mb-3 uppercase tracking-wider">Add New Category</h3>
+          <form onSubmit={handleAddCategory} className="flex space-x-2">
+            <input type="text" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} placeholder="e.g. Server Hosting" className="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-slate-200 focus:border-emerald-500 focus:outline-none" />
+            <select value={newCategoryType} onChange={(e) => setNewCategoryType(e.target.value)} className="bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-slate-200 focus:border-emerald-500 focus:outline-none">
+              <option value="expense">Expense</option>
+              <option value="income">Income</option>
+              <option value="transfer">Transfer</option>
+            </select>
+            <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-lg font-medium transition-colors">Add</button>
+          </form>
+        </div>
+
+        <div>
+          <h3 className="text-sm font-medium text-slate-400 mb-3 uppercase tracking-wider">Manage Existing Categories</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {categories.map((cat) => (
+              <div key={cat.id} className="flex justify-between items-center bg-slate-950 border border-slate-800 p-3 rounded-lg group">
+                <div>
+                  <span className="text-slate-200 font-medium">{cat.name}</span>
+                  <span className={`text-xs ml-2 px-2 py-0.5 rounded ${cat.type === 'income' ? 'bg-emerald-900/50 text-emerald-400' : cat.type === 'transfer' ? 'bg-blue-900/50 text-blue-400' : 'bg-red-900/50 text-red-400'}`}>{cat.type}</span>
+                </div>
+                
+                {confirmDeleteId === cat.id ? (
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs text-red-400 font-medium">Delete?</span>
+                    <button onClick={() => handleDeleteCategory(cat.id)} className="px-2 py-1 bg-red-600 hover:bg-red-500 text-white text-xs rounded transition-colors">Yes</button>
+                    <button onClick={() => setConfirmDeleteId(null)} className="px-2 py-1 bg-slate-700 hover:bg-slate-600 text-white text-xs rounded transition-colors">No</button>
+                  </div>
+                ) : (
+                  <button onClick={() => setConfirmDeleteId(cat.id)} className="text-slate-600 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all text-lg leading-none p-1">&times;</button>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// 2. UPDATED UPLOAD MODAL
 const UploadModal = ({ isOpen, onClose, onRefresh, categories }: { isOpen: boolean, onClose: () => void, onRefresh: () => void, categories: any[] }) => {
   const [mode, setMode] = useState<'manual' | 'bank' | 'investment'>('manual');
   const [desc, setDesc] = useState('');
@@ -46,11 +125,8 @@ const UploadModal = ({ isOpen, onClose, onRefresh, categories }: { isOpen: boole
   const [category, setCategory] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Auto-select the first category when modal opens
   useEffect(() => {
-    if (categories.length > 0 && !category) {
-      setCategory(categories[0].name);
-    }
+    if (categories.length > 0 && !category) setCategory(categories[0].name);
   }, [categories, category]);
 
   if (!isOpen) return null;
@@ -59,13 +135,17 @@ const UploadModal = ({ isOpen, onClose, onRefresh, categories }: { isOpen: boole
     e.preventDefault();
     setIsSubmitting(true);
     
+    // Find the category type directly from the database list instead of guessing via positive/negative numbers
+    const selectedCat = categories.find(c => c.name === category);
+    const txType = selectedCat ? selectedCat.type : 'expense';
     const numAmount = parseFloat(amount);
+
     const { error } = await supabase.from('transactions').insert([{
       date: new Date().toISOString().split('T')[0],
       description: desc,
       amount: numAmount,
       category: category,
-      type: numAmount >= 0 ? 'income' : 'expense'
+      type: txType
     }]);
 
     setIsSubmitting(false);
@@ -75,13 +155,11 @@ const UploadModal = ({ isOpen, onClose, onRefresh, categories }: { isOpen: boole
       onClose();   
       setDesc(''); 
       setAmount('');
-    } else {
-      alert("Database Error: " + error.message);
     }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
       <div className="bg-slate-900 border border-slate-700 rounded-xl w-full max-w-lg p-6 shadow-2xl">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold text-slate-100">Add Data</h2>
@@ -89,8 +167,8 @@ const UploadModal = ({ isOpen, onClose, onRefresh, categories }: { isOpen: boole
         </div>
         
         <div className="flex space-x-2 mb-6 bg-slate-800 p-1 rounded-lg">
-          <button onClick={() => setMode('manual')} className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${mode === 'manual' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>Manual Entry</button>
-          <button onClick={() => setMode('bank')} className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${mode === 'bank' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>Bank Statement</button>
+          <button onClick={() => setMode('manual')} className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${mode === 'manual' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>Manual</button>
+          <button onClick={() => setMode('bank')} className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${mode === 'bank' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>Statement</button>
         </div>
 
         {mode === 'manual' ? (
@@ -102,7 +180,7 @@ const UploadModal = ({ isOpen, onClose, onRefresh, categories }: { isOpen: boole
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm text-slate-400 mb-1">Amount (R)</label>
-                <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 focus:border-emerald-500 focus:outline-none placeholder-slate-600" placeholder="-450.00" />
+                <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 focus:border-emerald-500 focus:outline-none placeholder-slate-600" placeholder="450.00" />
               </div>
               <div>
                 <label className="block text-sm text-slate-400 mb-1">Category</label>
@@ -131,22 +209,18 @@ const UploadModal = ({ isOpen, onClose, onRefresh, categories }: { isOpen: boole
 // --- MAIN APPLICATION ---
 
 export default function Fortune8() {
-  const [activeTab, setActiveTab] = useState<'portfolio' | 'budgets' | 'transactions' | 'settings'>('transactions');
+  const [activeTab, setActiveTab] = useState<'portfolio' | 'budgets' | 'transactions'>('transactions');
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [portfolioView, setPortfolioView] = useState<'overview' | 'bank' | 'investments' | 'networth'>('overview');
   
-  // Real Database State
   const [transactions, setTransactions] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
-  const [newCategoryName, setNewCategoryName] = useState('');
-  const [newCategoryType, setNewCategoryType] = useState('expense');
 
   const fetchData = async () => {
-    // Fetch Transactions
     const { data: txData } = await supabase.from('transactions').select('*').order('id', { ascending: false });
     if (txData) setTransactions(txData);
 
-    // Fetch Categories
     const { data: catData } = await supabase.from('categories').select('*').order('name', { ascending: true });
     if (catData) setCategories(catData);
   };
@@ -154,28 +228,6 @@ export default function Fortune8() {
   useEffect(() => {
     fetchData();
   }, []);
-
-  const handleAddCategory = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newCategoryName) return;
-    
-    const { error } = await supabase.from('categories').insert([{ name: newCategoryName, type: newCategoryType }]);
-    if (!error) {
-      setNewCategoryName('');
-      fetchData(); // Refresh list
-    } else {
-      alert("Error adding category: " + error.message);
-    }
-  };
-
-  const handleDeleteCategory = async (id: number) => {
-    const { error } = await supabase.from('categories').delete().eq('id', id);
-    if (!error) {
-      fetchData();
-    } else {
-      alert("Error deleting category: " + error.message);
-    }
-  };
 
   return (
     <div className="min-h-screen text-slate-200 font-sans relative z-0">
@@ -189,7 +241,7 @@ export default function Fortune8() {
           </div>
           
           <nav className="hidden md:flex space-x-1 border border-slate-800 rounded-lg p-1 bg-slate-900/50">
-            {['portfolio', 'budgets', 'transactions', 'settings'].map((tab) => (
+            {['portfolio', 'budgets', 'transactions'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab as any)}
@@ -200,10 +252,17 @@ export default function Fortune8() {
             ))}
           </nav>
 
-          <button onClick={() => setIsModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg shadow-emerald-900/20 transition-all flex items-center space-x-2">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
-            <span>Add Data</span>
-          </button>
+          <div className="flex items-center space-x-3">
+            {/* THE NEW GEAR ICON */}
+            <button onClick={() => setIsSettingsOpen(true)} className="p-2 text-slate-400 hover:text-emerald-500 bg-slate-900 border border-slate-800 hover:border-emerald-500/50 rounded-lg transition-all">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+            </button>
+            
+            <button onClick={() => setIsModalOpen(true)} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-medium shadow-lg shadow-emerald-900/20 transition-all flex items-center space-x-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
+              <span className="hidden sm:inline">Add Data</span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -246,9 +305,13 @@ export default function Fortune8() {
                     <tr key={t.id} className="border-b border-slate-800 hover:bg-slate-800/50 transition-colors">
                       <td className="px-6 py-4">{t.date}</td>
                       <td className="px-6 py-4 text-slate-300 font-medium">{t.description}</td>
-                      <td className="px-6 py-4"><span className="px-2 py-1 bg-slate-800 rounded text-xs">{t.category}</span></td>
-                      <td className={`px-6 py-4 text-right font-medium ${t.amount > 0 ? 'text-emerald-400' : 'text-slate-300'}`}>
-                        {t.amount > 0 ? '+' : ''}R {Math.abs(t.amount).toFixed(2)}
+                      <td className="px-6 py-4">
+                        <span className={`px-2 py-1 rounded text-xs ${t.type === 'income' ? 'bg-emerald-900/50 text-emerald-400' : t.type === 'transfer' ? 'bg-blue-900/50 text-blue-400' : 'bg-slate-800 text-slate-300'}`}>
+                          {t.category}
+                        </span>
+                      </td>
+                      <td className={`px-6 py-4 text-right font-medium ${t.type === 'income' ? 'text-emerald-400' : t.type === 'transfer' ? 'text-blue-400' : 'text-slate-300'}`}>
+                        {t.type === 'income' ? '+' : t.type === 'expense' ? '-' : ''}R {Math.abs(t.amount).toFixed(2)}
                       </td>
                     </tr>
                   ))
@@ -258,34 +321,10 @@ export default function Fortune8() {
           </div>
         )}
 
-        {/* TAB 4: SETTINGS (NEW!) */}
-        {activeTab === 'settings' && (
-          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-6">
-            <h2 className="text-lg font-bold text-white mb-6">Manage Categories</h2>
-            
-            <form onSubmit={handleAddCategory} className="flex space-x-2 mb-8">
-              <input type="text" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} placeholder="New category name" className="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-slate-200 focus:border-emerald-500 focus:outline-none" />
-              <select value={newCategoryType} onChange={(e) => setNewCategoryType(e.target.value)} className="bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-slate-200 focus:border-emerald-500 focus:outline-none">
-                <option value="expense">Expense</option>
-                <option value="income">Income</option>
-              </select>
-              <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-lg font-medium transition-colors">Add</button>
-            </form>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-              {categories.map((cat) => (
-                <div key={cat.id} className="flex justify-between items-center bg-slate-950 border border-slate-800 p-3 rounded-lg">
-                  <span className="text-slate-300">{cat.name} <span className="text-xs text-slate-500 ml-1">({cat.type})</span></span>
-                  <button onClick={() => handleDeleteCategory(cat.id)} className="text-red-500 hover:text-red-400 text-xl leading-none">&times;</button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
       </main>
       
       <UploadModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onRefresh={fetchData} categories={categories} />
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} onRefresh={fetchData} categories={categories} />
     </div>
   );
 }
