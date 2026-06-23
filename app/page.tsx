@@ -2,8 +2,9 @@
 
 import React, { useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, Tooltip } from 'recharts';
+import { supabase } from '../lib/supabase';
 
-// --- MOCK DATA ---
+// --- MOCK DATA FOR CHARTS ---
 const budgetData = [
   { name: 'Groceries', value: 3200, color: '#10b981' }, 
   { name: 'Dining Out', value: 1500, color: '#ef4444' }, 
@@ -38,10 +39,46 @@ const MatrixBackground = () => {
   );
 };
 
-const UploadModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void }) => {
-  const [mode, setMode] = useState<'bank' | 'investment'>('bank');
+const UploadModal = ({ isOpen, onClose, onRefresh, categories }: { isOpen: boolean, onClose: () => void, onRefresh: () => void, categories: any[] }) => {
+  const [mode, setMode] = useState<'manual' | 'bank' | 'investment'>('manual');
+  const [desc, setDesc] = useState('');
+  const [amount, setAmount] = useState('');
+  const [category, setCategory] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Auto-select the first category when modal opens
+  useEffect(() => {
+    if (categories.length > 0 && !category) {
+      setCategory(categories[0].name);
+    }
+  }, [categories, category]);
 
   if (!isOpen) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    
+    const numAmount = parseFloat(amount);
+    const { error } = await supabase.from('transactions').insert([{
+      date: new Date().toISOString().split('T')[0],
+      description: desc,
+      amount: numAmount,
+      category: category,
+      type: numAmount >= 0 ? 'income' : 'expense'
+    }]);
+
+    setIsSubmitting(false);
+
+    if (!error) {
+      onRefresh(); 
+      onClose();   
+      setDesc(''); 
+      setAmount('');
+    } else {
+      alert("Database Error: " + error.message);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -52,20 +89,38 @@ const UploadModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void
         </div>
         
         <div className="flex space-x-2 mb-6 bg-slate-800 p-1 rounded-lg">
+          <button onClick={() => setMode('manual')} className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${mode === 'manual' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>Manual Entry</button>
           <button onClick={() => setMode('bank')} className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${mode === 'bank' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>Bank Statement</button>
-          <button onClick={() => setMode('investment')} className={`flex-1 py-2 rounded-md text-sm font-medium transition-colors ${mode === 'investment' ? 'bg-emerald-600 text-white' : 'text-slate-400 hover:text-slate-200'}`}>Investment Update</button>
         </div>
 
-        {mode === 'bank' ? (
+        {mode === 'manual' ? (
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm text-slate-400 mb-1">Description</label>
+              <input type="text" value={desc} onChange={(e) => setDesc(e.target.value)} required className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 focus:border-emerald-500 focus:outline-none placeholder-slate-600" placeholder="e.g. Woolworths" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Amount (R)</label>
+                <input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 focus:border-emerald-500 focus:outline-none placeholder-slate-600" placeholder="-450.00" />
+              </div>
+              <div>
+                <label className="block text-sm text-slate-400 mb-1">Category</label>
+                <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-slate-200 focus:border-emerald-500 focus:outline-none">
+                  {categories.map(cat => (
+                    <option key={cat.id} value={cat.name}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <button type="submit" disabled={isSubmitting} className="w-full mt-4 bg-emerald-600 hover:bg-emerald-500 disabled:bg-emerald-800 text-white font-medium py-3 rounded-lg transition-colors">
+              {isSubmitting ? 'Saving...' : 'Save Transaction'}
+            </button>
+          </form>
+        ) : (
           <div className="border-2 border-dashed border-slate-600 rounded-xl p-12 text-center hover:border-emerald-500 hover:bg-slate-800/50 transition-all cursor-pointer">
             <svg className="w-12 h-12 mx-auto text-slate-400 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
             <p className="text-slate-300 font-medium">Drag & drop PDF here</p>
-            <p className="text-slate-500 text-sm mt-1">or click to browse</p>
-          </div>
-        ) : (
-          <div>
-            <textarea className="w-full h-40 bg-slate-950 border border-slate-700 rounded-lg p-4 text-slate-300 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 resize-none" placeholder="Paste raw email text or portfolio summary here..."></textarea>
-            <button className="w-full mt-4 bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-3 rounded-lg transition-colors">Process Text</button>
           </div>
         )}
       </div>
@@ -76,9 +131,51 @@ const UploadModal = ({ isOpen, onClose }: { isOpen: boolean, onClose: () => void
 // --- MAIN APPLICATION ---
 
 export default function Fortune8() {
-  const [activeTab, setActiveTab] = useState<'portfolio' | 'budgets' | 'transactions'>('portfolio');
+  const [activeTab, setActiveTab] = useState<'portfolio' | 'budgets' | 'transactions' | 'settings'>('transactions');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [portfolioView, setPortfolioView] = useState<'overview' | 'bank' | 'investments' | 'networth'>('overview');
+  
+  // Real Database State
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [newCategoryType, setNewCategoryType] = useState('expense');
+
+  const fetchData = async () => {
+    // Fetch Transactions
+    const { data: txData } = await supabase.from('transactions').select('*').order('id', { ascending: false });
+    if (txData) setTransactions(txData);
+
+    // Fetch Categories
+    const { data: catData } = await supabase.from('categories').select('*').order('name', { ascending: true });
+    if (catData) setCategories(catData);
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const handleAddCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCategoryName) return;
+    
+    const { error } = await supabase.from('categories').insert([{ name: newCategoryName, type: newCategoryType }]);
+    if (!error) {
+      setNewCategoryName('');
+      fetchData(); // Refresh list
+    } else {
+      alert("Error adding category: " + error.message);
+    }
+  };
+
+  const handleDeleteCategory = async (id: number) => {
+    const { error } = await supabase.from('categories').delete().eq('id', id);
+    if (!error) {
+      fetchData();
+    } else {
+      alert("Error deleting category: " + error.message);
+    }
+  };
 
   return (
     <div className="min-h-screen text-slate-200 font-sans relative z-0">
@@ -92,7 +189,7 @@ export default function Fortune8() {
           </div>
           
           <nav className="hidden md:flex space-x-1 border border-slate-800 rounded-lg p-1 bg-slate-900/50">
-            {['portfolio', 'budgets', 'transactions'].map((tab) => (
+            {['portfolio', 'budgets', 'transactions', 'settings'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab as any)}
@@ -114,94 +211,16 @@ export default function Fortune8() {
         
         {/* TAB 1: PORTFOLIO */}
         {activeTab === 'portfolio' && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div onClick={() => setPortfolioView('bank')} className="bg-slate-900/80 border border-slate-800 rounded-xl p-6 cursor-pointer hover:border-emerald-500/50 transition-all">
-                <h3 className="text-slate-400 text-sm font-medium mb-2">Total Bank Balance</h3>
-                <p className="text-3xl font-bold text-white">R 45,230</p>
-              </div>
-              <div onClick={() => setPortfolioView('investments')} className="bg-slate-900/80 border border-slate-800 rounded-xl p-6 cursor-pointer hover:border-emerald-500/50 transition-all">
-                <h3 className="text-slate-400 text-sm font-medium mb-2">Total Investments</h3>
-                <p className="text-3xl font-bold text-white">R 128,400</p>
-              </div>
-              <div onClick={() => setPortfolioView('networth')} className="bg-emerald-900/20 border border-emerald-800/50 rounded-xl p-6 cursor-pointer hover:border-emerald-500 transition-all">
-                <h3 className="text-emerald-400/80 text-sm font-medium mb-2">Net Worth</h3>
-                <p className="text-3xl font-bold text-emerald-400">R 173,630</p>
-              </div>
-            </div>
-
-            <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-6 min-h-[400px]">
-              {portfolioView !== 'overview' && (
-                <button onClick={() => setPortfolioView('overview')} className="mb-6 text-sm text-emerald-500 hover:text-emerald-400 flex items-center space-x-1">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"></path></svg>
-                  <span>Return to Cash Flow Overview</span>
-                </button>
-              )}
-              
-              {portfolioView === 'overview' && (
-                 <div className="h-64 flex flex-col items-center justify-center border-2 border-dashed border-slate-700/50 rounded-lg">
-                   <p className="text-slate-400 font-medium mb-2">Cash Flow Overview</p>
-                   <p className="text-slate-600 text-sm">Interactive visualization will render here.</p>
-                 </div>
-              )}
-              {portfolioView === 'bank' && <p className="text-slate-300">Bank Accounts drill-down list...</p>}
-              {portfolioView === 'investments' && <p className="text-slate-300">Investment breakdown list...</p>}
-              {portfolioView === 'networth' && <p className="text-slate-300">Capital split visualization...</p>}
-            </div>
-          </div>
+           <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-6 h-64 flex items-center justify-center">
+               <p className="text-slate-400">Portfolio view (Requires database wiring)</p>
+           </div>
         )}
 
         {/* TAB 2: BUDGETS */}
         {activeTab === 'budgets' && (
-          <div className="space-y-6">
-            <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
-               
-               <div>
-                 <h2 className="text-lg font-bold text-white mb-6">Spending Breakdown</h2>
-                 <div className="flex justify-center items-center h-[250px]">
-                    <PieChart width={300} height={250}>
-                      <Pie
-                        data={budgetData}
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
-                        paddingAngle={5}
-                        dataKey="value"
-                        isAnimationActive={false}
-                      >
-                        {budgetData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={entry.color} stroke="rgba(0,0,0,0)" />
-                        ))}
-                      </Pie>
-                      <Tooltip 
-                        contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px', color: '#f1f5f9' }}
-                        itemStyle={{ color: '#f1f5f9' }}
-                      />
-                    </PieChart>
-                 </div>
-               </div>
-
-               <div>
-                 <h2 className="text-lg font-bold text-white mb-6">Monthly Targets</h2>
-                 <div className="space-y-6">
-                   <div>
-                     <div className="flex justify-between text-sm mb-2"><span className="text-slate-300">Groceries</span><span className="text-slate-400">R 3,200 / R 4,000</span></div>
-                     <div className="w-full bg-slate-800 rounded-full h-2.5"><div className="bg-emerald-500 h-2.5 rounded-full" style={{ width: '80%' }}></div></div>
-                   </div>
-                   <div>
-                     <div className="flex justify-between text-sm mb-2"><span className="text-slate-300">Dining Out (Cursive)</span><span className="text-slate-400">R 1,500 / R 1,200</span></div>
-                     <div className="w-full bg-slate-800 rounded-full h-2.5"><div className="bg-red-500 h-2.5 rounded-full" style={{ width: '100%' }}></div></div>
-                   </div>
-                   <div>
-                     <div className="flex justify-between text-sm mb-2"><span className="text-slate-300">Transport</span><span className="text-slate-400">R 800 / R 1,500</span></div>
-                     <div className="w-full bg-slate-800 rounded-full h-2.5"><div className="bg-blue-500 h-2.5 rounded-full" style={{ width: '53%' }}></div></div>
-                   </div>
-                 </div>
-               </div>
-
-            </div>
-          </div>
+           <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-6 h-64 flex items-center justify-center">
+               <p className="text-slate-400">Budget charts (Requires database wiring)</p>
+           </div>
         )}
 
         {/* TAB 3: TRANSACTIONS */}
@@ -210,30 +229,63 @@ export default function Fortune8() {
             <div className="p-4 border-b border-slate-800 flex justify-between items-center bg-slate-900">
               <select className="bg-slate-800 border border-slate-700 text-slate-300 text-sm rounded-lg focus:ring-emerald-500 focus:border-emerald-500 block p-2">
                 <option>All Categories</option>
-                <option>Groceries</option>
-                <option>Income</option>
+                {categories.map(c => <option key={c.id}>{c.name}</option>)}
               </select>
-              <button className="text-sm font-medium text-emerald-500 hover:text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-lg">Review Uncategorized (3)</button>
             </div>
             <table className="w-full text-sm text-left text-slate-400">
               <thead className="text-xs text-slate-500 uppercase bg-slate-900/50">
                 <tr><th className="px-6 py-3">Date</th><th className="px-6 py-3">Description</th><th className="px-6 py-3">Category</th><th className="px-6 py-3 text-right">Amount</th></tr>
               </thead>
               <tbody>
-                <tr className="border-b border-slate-800 hover:bg-slate-800/50 transition-colors">
-                  <td className="px-6 py-4">Jun 20</td><td className="px-6 py-4 text-slate-300 font-medium">Woolworths Olympus</td><td className="px-6 py-4"><span className="px-2 py-1 bg-slate-800 rounded text-xs">Groceries</span></td><td className="px-6 py-4 text-right">-R 450.00</td>
-                </tr>
-                <tr className="border-b border-slate-800 hover:bg-slate-800/50 transition-colors">
-                  <td className="px-6 py-4">Jun 18</td><td className="px-6 py-4 text-slate-300 font-medium">Salary Deposit</td><td className="px-6 py-4"><span className="px-2 py-1 bg-slate-800 rounded text-xs">Income</span></td><td className="px-6 py-4 text-right text-emerald-400">+R 24,000.00</td>
-                </tr>
+                {transactions.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-6 py-8 text-center text-slate-500 font-medium">No transactions yet.</td>
+                  </tr>
+                ) : (
+                  transactions.map((t) => (
+                    <tr key={t.id} className="border-b border-slate-800 hover:bg-slate-800/50 transition-colors">
+                      <td className="px-6 py-4">{t.date}</td>
+                      <td className="px-6 py-4 text-slate-300 font-medium">{t.description}</td>
+                      <td className="px-6 py-4"><span className="px-2 py-1 bg-slate-800 rounded text-xs">{t.category}</span></td>
+                      <td className={`px-6 py-4 text-right font-medium ${t.amount > 0 ? 'text-emerald-400' : 'text-slate-300'}`}>
+                        {t.amount > 0 ? '+' : ''}R {Math.abs(t.amount).toFixed(2)}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
         )}
 
+        {/* TAB 4: SETTINGS (NEW!) */}
+        {activeTab === 'settings' && (
+          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-6">
+            <h2 className="text-lg font-bold text-white mb-6">Manage Categories</h2>
+            
+            <form onSubmit={handleAddCategory} className="flex space-x-2 mb-8">
+              <input type="text" value={newCategoryName} onChange={(e) => setNewCategoryName(e.target.value)} placeholder="New category name" className="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-slate-200 focus:border-emerald-500 focus:outline-none" />
+              <select value={newCategoryType} onChange={(e) => setNewCategoryType(e.target.value)} className="bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-slate-200 focus:border-emerald-500 focus:outline-none">
+                <option value="expense">Expense</option>
+                <option value="income">Income</option>
+              </select>
+              <button type="submit" className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-lg font-medium transition-colors">Add</button>
+            </form>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+              {categories.map((cat) => (
+                <div key={cat.id} className="flex justify-between items-center bg-slate-950 border border-slate-800 p-3 rounded-lg">
+                  <span className="text-slate-300">{cat.name} <span className="text-xs text-slate-500 ml-1">({cat.type})</span></span>
+                  <button onClick={() => handleDeleteCategory(cat.id)} className="text-red-500 hover:text-red-400 text-xl leading-none">&times;</button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
       </main>
       
-      <UploadModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <UploadModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onRefresh={fetchData} categories={categories} />
     </div>
   );
 }
