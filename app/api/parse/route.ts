@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 // @ts-ignore
-import pdfParse from 'pdf-parse';
+const pdfParse = require('pdf-parse');
 
 export async function POST(req: Request) {
   try {
@@ -9,18 +9,20 @@ export async function POST(req: Request) {
     
     if (!file) return NextResponse.json({ error: 'No file uploaded' }, { status: 400 });
 
-    // 1. Convert the PDF into a readable format
+    // 1. Convert the PDF
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // 2. Rip the raw text off the PDF
+    // 2. Rip the text
     const pdfData = await pdfParse(buffer);
     const rawText = pdfData.text;
 
-    // 3. Command local Llama 3.1 to extract the data
+    // 3. Stricter Prompting
     const prompt = `
+      You are a strict data extraction API. Your ONLY job is to output a raw JSON array.
+      Do NOT output any conversational text, greetings, or explanations.
+      
       Extract all financial transactions from this bank statement.
-      Return ONLY a raw JSON array. Do not include any formatting, markdown, or intro text.
       Each object in the array must have exactly these keys:
       - "date": string (Format: YYYY-MM-DD)
       - "description": string (Clean up the vendor name)
@@ -30,7 +32,7 @@ export async function POST(req: Request) {
       ${rawText}
     `;
 
-    // 4. Send to your local Ollama server
+    // 4. Send to Ollama
     const ollamaRes = await fetch('http://localhost:11434/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -38,12 +40,25 @@ export async function POST(req: Request) {
         model: 'llama3.1',
         prompt: prompt,
         stream: false,
-        format: 'json' 
+        format: 'json'
       })
     });
 
     const ollamaData = await ollamaRes.json();
-    const transactions = JSON.parse(ollamaData.response);
+    
+    // --- THE FIX: The Regex Muzzle ---
+    // This finds the first '[' and the last ']' and throws away all conversational 
+    // text that the AI might have accidentally included before or after it.
+    let cleanResponse = ollamaData.response.trim();
+    const startIndex = cleanResponse.indexOf('[');
+    const endIndex = cleanResponse.lastIndexOf(']');
+    
+    if (startIndex !== -1 && endIndex !== -1) {
+      cleanResponse = cleanResponse.substring(startIndex, endIndex + 1);
+    }
+
+    // 5. Safely Parse the Cleaned Data
+    const transactions = JSON.parse(cleanResponse);
 
     return NextResponse.json({ transactions });
 
